@@ -1,7 +1,32 @@
 <script>  
   let prescriptions = $state([]) 
+  let selectedIdx = $state(null)
   let modal_form;
-  
+  let modal_delete;
+  let isSenior = $state(false)
+
+  let subTotal = $derived.by(() => {
+    let total = 0
+    prescriptions.forEach((prescription) => {
+      if (!prescription.compute) return
+      total += prescription.price * prescription.quantity
+    })
+    return total
+  })
+
+  let seniorDiscount = $derived.by(() => {
+    if (!isSenior) return 0
+    return subTotal * 0.20
+  })
+
+  let total = $derived.by(() => {
+    return subTotal - seniorDiscount
+  })
+  let selectedPrescription = $derived.by(() => { 
+    if (selectedIdx === null) return {}
+    return prescriptions[selectedIdx]
+  })
+
   $effect(() => {
     const storePrescriptions = localStorage.getItem("prescriptionsCalculatorData")
     if (storePrescriptions) prescriptions = JSON.parse(storePrescriptions)
@@ -31,69 +56,109 @@
   }
  
   
+  const deletePrescription = () => {
+    if (selectedIdx === null) return
+    prescriptions.splice(selectedIdx, 1)
+    modal_delete.close()
+    selectedIdx = null
+  }
+  
   const add = (e) => { 
     e.preventDefault()
-    const formData = new FormData(e.target) 
-    const data = Object.fromEntries(formData) 
-    // @ts-ignore
-    prescriptions.push(data) 
+    const formData = new FormData(e.target);
+    const dataObject = Object.fromEntries(formData);
+
+    const data = {
+        ...dataObject,
+        compute: true,
+        quantity: Number(dataObject.quantity),
+        price: Number(dataObject.price),
+        dosage: Number(dataObject.dosage),
+    };
+
+    if (selectedIdx !== null) {
+      prescriptions[selectedIdx] = data
+      selectedIdx = null
+    } else {
+      prescriptions.push(data) 
+    }
     e.target.reset()
     modal_form.close()
   } 
-</script>
- 
- 
-<!-- <button class="btn" onclick={() => modal_form.showModal()}>open modal</button> -->
+</script> 
 
- 
-<dialog bind:this={modal_form} id="my_modal_form" class="modal modal-bottom sm:modal-middle">
+<dialog bind:this={modal_delete} id="modal_delete" class="modal">
+  <div class="modal-box w-md"> 
+    <p class="text-center mb-2">Delete this prescription?</p>
+    <p class="text-center font-bold">{ selectedPrescription.name  }</p>
+    <div class="modal-action">
+      <button onclick={() => deletePrescription()} class="btn btn-sm btn-neutral"> 
+        Delete
+      </button>
+      <form method="dialog">
+        <button onclick={() => selectedIdx = null} class="btn btn-sm">Cancel</button>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+
+<dialog bind:this={modal_form} id="modal_form" class="modal modal-bottom sm:modal-middle">
   <div class="modal-box">
     <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      <button onclick={() => selectedIdx = null} class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
     </form>
     <form onsubmit={add} class="mx-2" action="">
-      <h1 class="text-center font-bold text-lg">Add Prescription</h1>
+      <h1 class="text-center font-bold text-lg">{Object.keys(selectedPrescription).length > 0 ? 'Update' : 'Add'} Prescription</h1>
       <label  class="form-control w-full">
         <div class="label">
             <span class="label-text">Name</span> 
         </div>
-        <input placeholder="e.g. Paracetamol 200mg" class='input input-sm input-bordered w-full' type="text" name="name" id=""> 
+        <input required placeholder="e.g. Paracetamol 200mg" class='input input-sm input-bordered w-full' type="text" name="name" value={selectedPrescription?.name ?? ''}> 
       </label>
       <div class="flex gap-4">
         <label  class="form-control w-full">
           <div class="label">
               <span class="label-text">Quantity</span> 
           </div>
-          <input placeholder="e.g. 21" class='input input-sm input-bordered w-full' type="number" name="quantity" step="any" id=""> 
+          <input required placeholder="e.g. 21" class='input input-sm input-bordered w-full' type="number" name="quantity" step="any" value={selectedPrescription?.quantity ?? ''}> 
         </label>
         <label  class="form-control w-full">
           <div class="label">
               <span class="label-text">Unit</span> 
           </div>
-          <input placeholder="e.g. tablet, capsule" class='input input-sm input-bordered w-full' type="text" name="unit" id=""> 
+          <input required placeholder="e.g. tablet, capsule" class='input input-sm input-bordered w-full' type="text" name="unit" value={selectedPrescription?.unit ?? ''}> 
         </label>  
         <label  class="form-control w-full">
           <div class="label">
               <span class="label-text">Est. price (₱)</span> 
           </div>
-          <input placeholder="e.g. 20.50" class='input input-sm input-bordered w-full' type="number" step="any" name="price" id=""> 
+          <input placeholder="e.g. 20.50" class='input input-sm input-bordered w-full' type="number" step="any" name="price" value={selectedPrescription?.price ?? ''}> 
         </label>  
       </div>
-      <label  class="form-control w-full mb-4">
+      <label  class="form-control w-full">
         <div class="label">
             <span class="label-text">Frequency</span> 
         </div>
         <div class="flex align-middle items-center">
-          <input placeholder="e.g. 3" class='input input-sm input-bordered w-full' type="number" min="0" name="dosage" id="">
+          <input required placeholder="e.g. 3" class='input input-sm input-bordered w-full' type="number" min="0" name="dosage" value={selectedPrescription?.dosage ?? ''}>
           <h1 class="mx-2">per</h1>
-          <select name="period" class="select select-sm select-bordered w-full max-w-xs">
+          <select name="period" class="select select-sm select-bordered w-full max-w-xs" value={selectedPrescription?.period ?? ''}>
             <option selected>Day</option>
             <option>Week</option>
             <option>Month</option>
           </select>
         </div>
       </label>
-      <button type="submit" class="btn btn-primary w-full">Add</button>
+
+      <label  class="form-control w-full mb-4">
+        <div class="label">
+            <span class="label-text">Instructions</span> 
+        </div>
+        <textarea name="instructions" class="textarea textarea-bordered" placeholder="e.g. 30 minutes before breakfast" value={selectedPrescription?.instructions ?? ''}></textarea>
+      </label>
+      
+      <button type="submit" class="btn btn-primary w-full">{Object.keys(selectedPrescription).length > 0 ? 'Update' : 'Add'}</button>
     </form> 
   </div>
 </dialog>
@@ -107,7 +172,7 @@
           <div class="md:col-span-2 space-y-4"> 
 
             {#each prescriptions as prescription, idx (idx)}
-              <div class="flex gap-4 bg-white px-3 py-4 rounded-md shadow-[0_2px_12px_-3px_rgba(6,81,237,0.3)]">
+              <div class="{prescription.compute ? 'bg-white' : 'bg-white opacity-60'} flex gap-4  px-3 py-4 rounded-md shadow-[0_2px_12px_-3px_rgba(6,81,237,0.3)]">
                 <div class="flex gap-4"> 
                     <div class="flex  flex-col gap-3">
                         <div>
@@ -121,28 +186,20 @@
                                 </div>
                                 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
                                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
-                                  <li>
-                                    <button class="btn btn-sm">
+                                  <li> 
+                                    <button class="btn" onclick={() => { selectedIdx = idx; modal_delete.showModal(); }}>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                                         <path fill="currentColor" d="M19 4h-3.5l-1-1h-5l-1 1H5v2h14M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6z" />
                                       </svg>
                                       Delete
-                                    </button>
+                                    </button> 
                                   </li>
                                   <li>
-                                    <button class="btn btn-sm"> 
+                                    <button onclick={() => { selectedIdx = idx; modal_form.showModal(); }} class="btn btn-sm"> 
                                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                                         <path fill="currentColor" d="M3 21v-4.25L16.2 3.575q.3-.275.663-.425t.762-.15t.775.15t.65.45L20.425 5q.3.275.438.65T21 6.4q0 .4-.137.763t-.438.662L7.25 21zM17.6 7.8L19 6.4L17.6 5l-1.4 1.4z" />
                                       </svg>
                                       Edit
-                                    </button>
-                                  </li>
-                                  <li>
-                                    <button class="btn btn-sm">
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-                                        <path fill="currentColor" d="M11.83 9L15 12.16V12a3 3 0 0 0-3-3zm-4.3.8l1.55 1.55c-.05.21-.08.42-.08.65a3 3 0 0 0 3 3c.22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53a5 5 0 0 1-5-5c0-.79.2-1.53.53-2.2M2 4.27l2.28 2.28l.45.45C3.08 8.3 1.78 10 1 12c1.73 4.39 6 7.5 11 7.5c1.55 0 3.03-.3 4.38-.84l.43.42L19.73 22L21 20.73L3.27 3M12 7a5 5 0 0 1 5 5c0 .64-.13 1.26-.36 1.82l2.93 2.93c1.5-1.25 2.7-2.89 3.43-4.75c-1.73-4.39-6-7.5-11-7.5c-1.4 0-2.74.25-4 .7l2.17 2.15C10.74 7.13 11.35 7 12 7" />
-                                      </svg>
-                                      Hide
                                     </button>
                                   </li> 
                                 </ul>
@@ -154,7 +211,7 @@
                                 </svg>
                               </button> -->
                             </div>
-                            <h3 class="text-base font-bold text-gray-800 line-clamp-1"> {prescription.name}</h3>
+                            <h3 class="text-base font-bold mt-1 text-gray-800 line-clamp-1"> {prescription.name}</h3>
                           </div>
                           <p class="text-xs lg:text-sm font-semibold text-gray-500 mt-2 flex items-center gap-2">{prescription.quantity} {prescription.unit}s | {prescription.dosage}x per {prescription.period}</p> 
                         </div>
@@ -193,7 +250,10 @@
                       </label>
                     </div> 
                     <h6 class="text-right text-xs lg:text-sm font-semibold text-gray-500 mt-2">will last {Math.floor(prescription.quantity / (prescription.dosage))} {prescription.quantity / (prescription.dosage) > 1 ? `${prescription.period}s` : `${prescription.period}`}</h6> 
-                    <h3 class="text-right text-base font-bold text-gray-800 mt-auto">₱{(prescription.price * prescription.quantity).toLocaleString()}</h3>
+                    <label class="label cursor-pointer"> 
+                      <input onchange={() => { prescription.compute = !prescription.compute; }} type="checkbox" class="toggle toggle-sm" checked={prescription.compute} />
+                      <h3 class="text-right text-base font-bold text-gray-800 mt-auto">₱{(prescription.price * prescription.quantity).toLocaleString()}</h3>
+                    </label> 
                 </div>
 
               </div> 
@@ -213,23 +273,14 @@
  
           <div class="bg-white rounded-md px-4 py-6 h-max shadow-[0_2px_12px_-3px_rgba(6,81,237,0.3)]">
               <ul class="text-gray-800 space-y-4">
-                  <li class="flex flex-wrap gap-4 text-sm">Subtotal <span class="ml-auto font-bold">$200.00</span></li>
-                  <li class="flex flex-wrap gap-4 text-sm">Shipping <span class="ml-auto font-bold">$2.00</span></li>
-                  <li class="flex flex-wrap gap-4 text-sm">Tax <span class="ml-auto font-bold">$4.00</span></li>
+                  <li class="flex flex-wrap gap-4 text-lg">Subtotal <span class="ml-auto font-bold">₱{subTotal.toFixed(2)}</span></li>
+                  <li class="flex flex-wrap gap-4 text-lg">Senior Discount 
+                    <input onchange={() => { isSenior = !isSenior; }} type="checkbox" class="toggle toggle-md" checked={isSenior} />
+                    <span class="ml-auto font-bold">₱{seniorDiscount.toFixed(2)}</span></li> 
                   <hr class="border-gray-300" />
-                  <li class="flex flex-wrap gap-4 text-sm font-bold">Total <span class="ml-auto">$206.00</span></li>
+                  <li class="flex flex-wrap gap-4 text-lg font-bold">Total <span class="ml-auto">₱{total.toFixed(2)}</span></li>
               </ul>
-
-              <div class="mt-8 space-y-2">
-                  <button type="button" class="text-sm px-4 py-2.5 w-full font-semibold tracking-wide bg-gray-800 hover:bg-gray-900 text-white rounded-md">Buy Now</button>
-                  <button type="button" class="text-sm px-4 py-2.5 w-full font-semibold tracking-wide bg-transparent hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-md">Continue Shopping  </button>
-              </div>
-
-              <div class="mt-4 flex flex-wrap justify-center gap-4">
-                  <img src='https://readymadeui.com/images/master.webp' alt="card1" class="w-10 object-contain" />
-                  <img src='https://readymadeui.com/images/visa.webp' alt="card2" class="w-10 object-contain" />
-                  <img src='https://readymadeui.com/images/american-express.webp' alt="card3" class="w-10 object-contain" />
-              </div>
+ 
           </div>
       </div>
   </div>
