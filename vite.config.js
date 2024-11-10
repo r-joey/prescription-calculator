@@ -3,6 +3,6 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/precription-calculator/',
+  base: '/prescription-calculator/',
   plugins: [svelte()],
 })
